@@ -224,6 +224,8 @@ int communication(string message, int* soc)
 	
 	//if(DEBUG){cout << "Message for server: " << message << endl;}
 	
+	
+		
 	// uspat?
 	//sleep(1);
 	if ( ( n = read(*soc, recieved_message, sizeof(recieved_message)) ) < 0 )	// obdrzeni zpravy
