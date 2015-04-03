@@ -26,6 +26,7 @@
 /*
  * TO DO LIST:
  * - dokumentace
+ * - SLEEP?
  */
 
 using namespace std;

@@ -15,6 +15,10 @@
 #include <iostream>
 #include <vector>
 
+/****** POMOCNA MAKRA ******/
+#define DEBUG 1
+#define BUFF_SIZE 100
+
 /*
  * TO DO LIST:
  *	- /etc/passwd
@@ -32,11 +36,15 @@ using namespace std;
  */
 
 typedef struct {
+	
+	
 	int port;
 	string hostname;
-	} tUrl;
+	} tOptions;
  
-int Get_port(int argc, char* argv[]);
+int Get_port(int, char* []);
+int setNetwork(int*, struct sockaddr_in*, tOptions*);
+int createSocket();
 //int Message_send(string message, int socket);
 //int Process_answer(string message);
 
@@ -46,37 +54,30 @@ int Get_port(int argc, char* argv[]);
  */
 int main(int argc, char* argv[])
 {
-	int s, t, sin_len, msg_len;
+	int soc, t, sin_len, msg_len;
 	struct sockaddr_in sin;
 	struct in_addr;
 	char msg[80];
-	// char recived_message;
+	//char recived_message[BUFF_SIZE];
 	struct hostent* hp;
 	int j;
-	tUrl url;
+	tOptions options;
 	
-	url.port = Get_port(argc, argv);
+	options.port = Get_port(argc, argv);
 	
 	// hodit do funkce
+	setNetwork(&soc, &sin, &options);
 	
-	if ( (s = socket(PF_INET, SOCK_STREAM, 0 ) ) < 0)
-	{														
-		cerr << "Error on socket" << endl;						// socket error
-		return -1;
-	}
-	sin.sin_family = PF_INET;									// set protocol family to Internet */
-	sin.sin_port = url.port;										// set port no.
-	sin.sin_addr.s_addr = INADDR_ANY;   						// set IP addr to any interface
 	
 	// pocud
 	
 	// cout << sin.sin_addr.s_addr << endl;
-	if (bind(s, (struct sockaddr *)&sin, sizeof(sin) ) < 0 )
+	if (bind(soc, (struct sockaddr *)&sin, sizeof(sin) ) < 0 )
 	{
 		cerr << "error on bind" << endl;
 		return -1;												// bind error
 	}
-	if (listen(s, 5))
+	if (listen(soc, 5))
 	{ 
 		cerr << "error on listen" << endl;						// listen error
 		return -1;
@@ -87,16 +88,16 @@ int main(int argc, char* argv[])
 		/* accepting new connection request from client,
 		socket id for the new connection is returned in t */
 		
-		if ( (t = accept(s, (struct sockaddr *)&sin, (socklen_t*)&sin_len) ) < 0 )
+		if ( (t = accept(soc, (struct sockaddr *)&sin, (socklen_t*)&sin_len) ) < 0 )
 		{
 			cerr << "Error on accept." << endl;					// accept error
 			return -1;
 		}
 		hp = (struct hostent *)gethostbyaddr((char *)&sin.sin_addr, 4, AF_INET);
 		j = (int)(hp->h_length);
-		url.hostname = inet_ntoa(sin.sin_addr);
-		url.port = htons(sin.sin_port);
-		cout << "From " << url.port << " (" << hp->h_name << ") : " << url.hostname << "." << endl;
+		options.hostname = inet_ntoa(sin.sin_addr);
+		options.port = htons(sin.sin_port);
+		cout << "From " << options.port << " (" << hp->h_name << ") : " << options.hostname << "." << endl;
 		bzero(msg, 80*sizeof(char) );
 		
 		if ( read( t, msg, 80 ) <0)
@@ -108,17 +109,17 @@ int main(int argc, char* argv[])
 		cout << "length of message is " << msg_len << endl << "Message from client is:" << msg << endl;
 		if ( write(t, msg, strlen(msg) ) < 0 )
 		{														// echo message back
-			cerr << "error on write" << endl;
+			cerr << "Error on write." << endl;
 			return -1;											// write error
 		}
 		/* close connection, clean up sockets */
 		if ( close(t) < 0 )
 		{
-			cerr << "error on close" << endl;
+			cerr << "Error on close." << endl;
 			return -1;
 		}
 	} // not reach below
-	if (close(s) < 0)
+	if (close(soc) < 0)
 	{
 		cerr << "close error" << endl;
 		return -1;
@@ -150,4 +151,47 @@ int Get_port(int argc, char* argv[])
 		}
 	}
 	return port;
+}
+
+/****************************************************************************************************
+ * Funkce.
+ ****************************************************************************************************
+ * @param sin - pointer na strukturu
+ * @param soc_p - socket
+ * @return - se stejne zahodi
+ * - z prikladu k predmetu, jen vlozeno do funkce
+ */
+int setNetwork(int *soc_p, struct sockaddr_in* sin, tOptions* opts)
+{
+	*soc_p = createSocket();
+	
+	const char* host;
+	struct hostent *hptr;
+	sin->sin_family = PF_INET;	// set protocol family to Internet
+	sin->sin_port = opts->port; // sin->sin_port = htons(options->port);
+	sin->sin_addr.s_addr = INADDR_ANY;
+	host = opts->hostname.c_str();
+	if ( ( hptr = gethostbyname(host) ) == NULL)	// ziskani adresy
+	{
+		cerr << "Gethostbyname error: " << host << endl;
+		exit(EXIT_FAILURE);
+	}
+	memcpy( &sin->sin_addr, hptr->h_addr, hptr->h_length);
+	return 0;
+}
+
+/****************************************************************************************************
+ * Funkce pro vytvoreni socketu.
+ ****************************************************************************************************
+ * @return - vytvoreny socket
+ */
+int createSocket()
+{
+	int new_soc;
+	if ( (new_soc = socket(PF_INET, SOCK_STREAM, 0 ) ) < 0)	// create socket
+	{
+		cerr << "Error on socket." << endl;	// socket error
+		exit(EXIT_FAILURE);
+	}
+	return new_soc;
 }
