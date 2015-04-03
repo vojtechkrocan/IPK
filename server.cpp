@@ -36,17 +36,17 @@ using namespace std;
  */
 
 typedef struct {
-	
-	
+	string parameters;
 	int port;
-	string hostname;
 	} tOptions;
- 
-int Get_port(int, char* []);
+
+void initOptions(tOptions*);
+int getPort(int, char* [], tOptions*);
 int setNetwork(int*, struct sockaddr_in*, tOptions*);
 int createSocket();
-//int Message_send(string message, int socket);
-//int Process_answer(string message);
+int acceptConnection(struct sockaddr_in*, struct sockaddr_in*, int*, int*);
+int communicate(int*);
+string createAnswer(string);
 
 /****************************************************************************************************
  * Main.
@@ -54,77 +54,59 @@ int createSocket();
  */
 int main(int argc, char* argv[])
 {
-	int soc, t, sin_len, msg_len;
-	struct sockaddr_in sin;
-	struct in_addr;
-	char msg[80];
-	//char recived_message[BUFF_SIZE];
-	struct hostent* hp;
-	int j;
+	int welcome_soc, in_soc;
+	struct sockaddr_in sin, client_sin;
 	tOptions options;
+	memset(&sin, 0, sizeof(sin));
 	
-	options.port = Get_port(argc, argv);
+	initOptions(&options);
+	getPort(argc, argv, &options);
+	setNetwork(&welcome_soc, &sin, &options);
 	
-	// hodit do funkce
-	setNetwork(&soc, &sin, &options);
-	
-	
-	// pocud
-	
-	// cout << sin.sin_addr.s_addr << endl;
-	if (bind(soc, (struct sockaddr *)&sin, sizeof(sin) ) < 0 )
+	/*
+	WHILE START
+	while(1)
 	{
-		cerr << "error on bind" << endl;
-		return -1;												// bind error
-	}
-	if (listen(soc, 5))
-	{ 
-		cerr << "error on listen" << endl;						// listen error
-		return -1;
-	}
-	sin_len = sizeof(sin);
+		
+	*/
+	
 	while (1)
 	{
-		/* accepting new connection request from client,
-		socket id for the new connection is returned in t */
-		
-		if ( (t = accept(soc, (struct sockaddr *)&sin, (socklen_t*)&sin_len) ) < 0 )
+		int pid;
+		/* accepting new connection request from client, socket id for the new connection is returned in t */
+		acceptConnection(&client_sin, &sin, &welcome_soc, &in_soc);
+		/*
+		if( in_soc <= 0 ) continue;
+		pid = fork();	// fork
+		if ( pid < 0 )
 		{
-			cerr << "Error on accept." << endl;					// accept error
-			return -1;
-		}
-		hp = (struct hostent *)gethostbyaddr((char *)&sin.sin_addr, 4, AF_INET);
-		j = (int)(hp->h_length);
-		options.hostname = inet_ntoa(sin.sin_addr);
-		options.port = htons(sin.sin_port);
-		cout << "From " << options.port << " (" << hp->h_name << ") : " << options.hostname << "." << endl;
-		bzero(msg, 80*sizeof(char) );
+          cerr << "Error on fork." << endl;
+          exit(EXIT_FAILURE);
+        }
 		
-		if ( read( t, msg, 80 ) <0)
-		{  /* read message from client */
-			cerr << "error on read" << endl;					// read error
-			return -1;
+		if ( pid == 0 ) // child process
+		{
+			communicate(&in_soc);
 		}
-		msg_len = strlen(msg);
-		cout << "length of message is " << msg_len << endl << "Message from client is:" << msg << endl;
-		if ( write(t, msg, strlen(msg) ) < 0 )
-		{														// echo message back
-			cerr << "Error on write." << endl;
-			return -1;											// write error
-		}
+		else
+		*/
 		/* close connection, clean up sockets */
-		if ( close(t) < 0 )
+		if ( close(in_soc) < 0 )
 		{
 			cerr << "Error on close." << endl;
-			return -1;
+			return EXIT_FAILURE;
 		}
 	} // not reach below
-	if (close(soc) < 0)
+	if (close(welcome_soc) < 0)
 	{
-		cerr << "close error" << endl;
-		return -1;
+		cerr << "Close error." << endl;
+		return EXIT_FAILURE;
 	}
-	return 0;
+	/*
+	}
+	WHILE END
+	*/
+	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************
@@ -133,24 +115,29 @@ int main(int argc, char* argv[])
  * @param argc, argv - ...
  * @return cislo portu z argumentu
  */
-int Get_port(int argc, char* argv[])
+int getPort(int argc, char* argv[], tOptions* opts)
 {
-	int port = -1;
 	int option;
-	while ( (option = getopt (argc, argv, "p:")) != -1 )					// pouziti getoptu
+	if ( argc != 3 )
+	{
+		cerr << "Error: Too few or Too many parameters." << endl;
+		exit(EXIT_FAILURE);
+	}
+	while ( (option = getopt (argc, argv, "p:")) != -1 )	// pouziti getoptu
 	{
 		switch(option)
 		{
 			case 'p':
 				// mozna pridat podminku, jestli to je cislo
-				port = atoi(argv[2]);
+				opts->port = atoi(optarg);
 				break;
 			default:
 				exit(EXIT_FAILURE);
 				break;
 		}
 	}
-	return port;
+	// if port neni cislo, skonci
+	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************
@@ -164,20 +151,20 @@ int Get_port(int argc, char* argv[])
 int setNetwork(int *soc_p, struct sockaddr_in* sin, tOptions* opts)
 {
 	*soc_p = createSocket();
-	
-	const char* host;
-	struct hostent *hptr;
 	sin->sin_family = PF_INET;	// set protocol family to Internet
 	sin->sin_port = opts->port; // sin->sin_port = htons(options->port);
 	sin->sin_addr.s_addr = INADDR_ANY;
-	host = opts->hostname.c_str();
-	if ( ( hptr = gethostbyname(host) ) == NULL)	// ziskani adresy
+	if ( bind(*soc_p, (struct sockaddr *)sin, sizeof(*sin) ) < 0 )
 	{
-		cerr << "Gethostbyname error: " << host << endl;
+		cerr << "Error on bind." << endl;
+		exit(EXIT_FAILURE);	// bind error
+	}
+	if ( listen(*soc_p, 5) )
+	{ 
+		cerr << "Error on listen." << endl;	// listen error
 		exit(EXIT_FAILURE);
 	}
-	memcpy( &sin->sin_addr, hptr->h_addr, hptr->h_length);
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************
@@ -188,10 +175,95 @@ int setNetwork(int *soc_p, struct sockaddr_in* sin, tOptions* opts)
 int createSocket()
 {
 	int new_soc;
-	if ( (new_soc = socket(PF_INET, SOCK_STREAM, 0 ) ) < 0)	// create socket
+	if ( (new_soc = socket(PF_INET, SOCK_STREAM, 0 )) < 0 )	// create socket
 	{
 		cerr << "Error on socket." << endl;	// socket error
 		exit(EXIT_FAILURE);
 	}
 	return new_soc;
+}
+/****************************************************************************************************
+ * .
+ ****************************************************************************************************
+ * @param
+ * @param
+ * @param
+ * @param
+ * @return			zahodi se
+ */
+int acceptConnection(struct sockaddr_in* client_sin, struct sockaddr_in* sin, int* welcome_soc, int* in_soc)
+{
+	/* accepting new connection request from client, socket id for the new connection is returned in in_soc */
+	int sin_len, port;
+	string hostname;
+	sin_len = sizeof(*sin);
+	*in_soc = accept(*welcome_soc, (struct sockaddr *)sin, (socklen_t*)&sin_len);
+	if(DEBUG)
+	{
+		hostname = inet_ntoa(sin->sin_addr);
+		port = htons(sin->sin_port);
+		cout << "From " << port << ": " << hostname << "." << endl;
+	}
+	return EXIT_SUCCESS;
+}
+
+/****************************************************************************************************
+ * .
+ ****************************************************************************************************
+ * @param
+ * @return			vytvoreny socket
+ */
+int communicate(int* in_soc)
+{
+	char recived_message[BUFF_SIZE];
+	int msg_len;
+	string request, answer;
+	bzero(recived_message, BUFF_SIZE*sizeof(char) );
+	
+	/***** READ REQUEST *****/
+	if ( read(*in_soc, recived_message, BUFF_SIZE ) <0)
+	{
+		cerr << "error on read" << endl;	// read error
+		return -1;
+	}
+	msg_len = strlen(recived_message);
+	cout << "Length of message is " << msg_len << ". Message from client is:" << endl << recived_message << endl;
+	
+	/***** CREATE ANSWER *****/
+	request = recived_message;
+	answer = createAnswer(request);
+	/***** WRITE ANSWER *****/
+	if ( send(*in_soc, answer.c_str(), answer.length(), 0) < 0 )	// odeslani odpovedi klientovi
+	{
+		perror("Error on sending.\n");	// chyba pri odesilani zpravy
+		exit(EXIT_FAILURE);
+	}
+	
+	return EXIT_SUCCESS;
+}
+
+/****************************************************************************************************
+ * .
+ ****************************************************************************************************
+ * @param
+ * @return			vytvorena zprava
+ */
+string createAnswer(string request)
+{
+	int length;
+	string answer;
+	length = request.size();
+	answer = "PIZDA\n";
+	return answer;
+}
+
+/****************************************************************************************************
+ * Funkce na inicializaci struktury s prepinaci.
+ ****************************************************************************************************
+ * @param tOptions* - uk. na strukturu k inicializaci
+ */
+void initOptions(tOptions* opts)
+{
+	opts->port = -1;
+	opts->parameters = "";
 }

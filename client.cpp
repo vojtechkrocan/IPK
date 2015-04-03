@@ -21,7 +21,7 @@
 #define UID		2
 #define BUFF_SIZE 100
 // pomocny ladici define
-#define DEBUG	0
+#define DEBUG	1
 
 /*
  * TO DO LIST:
@@ -40,11 +40,10 @@ using namespace std;
 typedef struct
 {
 	int u_or_l;	// prepinac - slouzi pro rozliseni, zda se hleda podle loginu nebo uid
+	// pomocne vektory
 	vector<string> login_vect;
 	vector<string> uid_vect;
-	
 	string prepinace;
-	
 	// pomocne flagy
 	int L_flag;
 	int U_flag;
@@ -52,12 +51,10 @@ typedef struct
 	int N_flag;
 	int H_flag;
 	int S_flag;
-	
 	int hostname_flag;
 	int port_flag;
 	int login_flag;
 	int uid_flag;
-	
 	string hostname;
 	int port;
 } tOptions;
@@ -69,6 +66,7 @@ int createSocket();
 int setNetwork(struct sockaddr_in*, tOptions*, int*);
 string createMessage(tOptions* opts);
 int communication(string, int*);
+int connectToServer(int* soc, struct sockaddr_in* sin);
 
 /****************************************************************************************************
  * Main.
@@ -84,14 +82,8 @@ int main (int argc, char* argv[])
 	
 	initOptions(&options);	// incializace hodnot ve pomocne strukture
 	processArg(argc, argv, &options);	// zpracovani argumentu - ulozeni prepinacu
-	
 	setNetwork(&sin, &options, &soc);	// vytvoreni socketu, ziskani adresy
-	
-	if ( connect (soc, (struct sockaddr *)&sin, sizeof(sin) ) < 0 )
-	{
-		perror("Error on connect.\n");	// chyba pripojeni
-		exit(EXIT_FAILURE);
-	}
+	connectToServer(&soc, &sin);	// pripojeni k serveru
 	
 	int i = 0;
 	if( ( options.u_or_l == LOGIN && !(options.login_vect.empty()) ) || ( options.u_or_l == UID && !(options.uid_vect.empty()) ) )
@@ -106,6 +98,10 @@ int main (int argc, char* argv[])
 			i = 1;
 		else
 			i = 0;
+		/*
+		if( ( options.u_or_l == LOGIN && options.login_vect.empty() ) || ( options.u_or_l == UID && options.uid_vect.empty() ) )
+			i = 0;
+		*/
 	}
 	
 	/***** UZAVRENI SOCKETU *****/
@@ -115,7 +111,7 @@ int main (int argc, char* argv[])
 		return(EXIT_FAILURE);
 	}
 	
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************
@@ -190,14 +186,14 @@ int processArg(int argc, char* argv[], tOptions* opts)
 				break;
 				
 			default:
-				cerr <<  "Program byl spusten s neznamym argumentem." << endl;
+				cerr << "Wrong argument." << endl;
 				exit(EXIT_FAILURE);
 				break;
 		}
 	}
 	if ( argc == 1 || opts->hostname_flag == 0 || opts->port_flag == 0) // ( login_f == 0 && uid_f == 0 )?
 	{
-		cerr << "Program byl spusten bez potrebnych argumentu." << endl;
+		cerr << "Client needs hostname and port." << endl;
 		exit(EXIT_FAILURE);
 	}
 	
@@ -222,10 +218,7 @@ int communication(string message, int* soc)
 		perror("Error on sending.\n");	// chyba pri odesilani zpravy
 		exit(EXIT_FAILURE);
 	}
-	
-	//if(DEBUG){cout << "Message for server: " << message << endl;}
-	
-	
+	if(DEBUG){cout << "Message for server:" << endl << message << endl;}
 		
 	// uspat?
 	//sleep(1);
@@ -235,8 +228,10 @@ int communication(string message, int* soc)
 		exit(EXIT_FAILURE);
 	}
 	
+	// projit recieved message, jestli bude na zacatku F cout, jestli N cerr;
+	
 	/***** TISK OBDRZENE ZPRAVY *****/
-	cout << "Answer from server:" << endl;
+	if(DEBUG){cout << "Answer from server: " << endl;}
 	cout << recieved_message;
 	
 	return 0;
@@ -282,6 +277,21 @@ int createSocket()
 		exit(EXIT_FAILURE);
 	}
 	return new_soc;
+}
+
+/****************************************************************************************************
+ * Funkce pro vytvoreni socketu.
+ ****************************************************************************************************
+ * @return - vytvoreny socket
+ */
+int connectToServer(int* soc, struct sockaddr_in* sin)
+{
+	if ( connect (*soc, (struct sockaddr *)sin, sizeof(*sin) ) < 0 )
+	{
+		perror("Error on connect.\n");	// chyba pripojeni
+		exit(EXIT_FAILURE);
+	}
+	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************

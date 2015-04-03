@@ -78,3 +78,20 @@ for( vector<string>::const_iterator i = options.login_vect.begin(); i != options
 	}
 	
 // ********************************************************************************************************
+
+	sin_len = sizeof(*sin);
+	if ( (*in_soc = accept(*welcome_soc, (struct sockaddr *)sin, (socklen_t*)&sin_len)) < 0 )
+	{
+		cerr << "Error on accept." << endl;					// Accept error
+		exit(EXIT_FAILURE);
+	}
+
+// ********************************************************************************************************
+
+	if ( write(*in_soc, recived_message, strlen(recived_message) ) < 0 )
+	{
+		cerr << "Error on write." << endl;
+		exit(EXIT_SUCCESS);	// write error
+	}
+
+// ********************************************************************************************************
