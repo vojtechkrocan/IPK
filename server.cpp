@@ -20,16 +20,11 @@
 #include <algorithm>
 
 /****** POMOCNA MAKRA ******/
-#define DEBUG 1
 #define BUFF_SIZE 100
 
 /*
  * TO DO LIST:
- *	- /etc/passwd
- *	- pouzit vektor
  *	- dokumentace
- * 	- polozky oddelit mezerou
- *	- kdyz sestavujes odpoved, tak kdybys nasel vic matchu, tak pridej dalsi radek a dej to na nej
  */
 
 using namespace std;
@@ -44,14 +39,6 @@ typedef struct {
 	string parameters;
 	string search;
 	vector<string> goals;
-	/*
-	string UID;
-	string LOGIN;
-	string GID;
-	string NAME;
-	string HOME;
-	string SHELL;
-	*/
 	int port;
 	} tOptions;
 
@@ -61,8 +48,8 @@ int setNetwork(int*, struct sockaddr_in*, tOptions*);
 int createSocket();
 int acceptConnection(struct sockaddr_in*, int*, int*);
 int communicate(int*, tOptions*);
-string createAnswer(char *, tOptions*);
-int processRequest(string, tOptions*);
+string createAnswer(char *, tOptions*, int*);
+int processRequest(string, tOptions*, int*);
 int find(tOptions*);
 
 /****************************************************************************************************
@@ -72,22 +59,19 @@ int find(tOptions*);
 int main(int argc, char* argv[])
 {
 	int welcome_soc, in_soc;
-	struct sockaddr_in sin, client_sin;
+	struct sockaddr_in sin;
 	tOptions options;
 	memset(&sin, 0, sizeof(sin));
-	
+
 	initOptions(&options);
 	getPort(argc, argv, &options);
 	setNetwork(&welcome_soc, &sin, &options);
-	
 	while (1)
 	{
 		int pid;
-		/* accepting new connection request from client, socket id for the new connection is returned in t */
+		/* accepting new connection request from client, socket id for the new connection is returned in in_soc */
 		acceptConnection(&sin, &welcome_soc, &in_soc);
 		if( in_soc <= 0 ) continue;
-		
-		//cout << "Sem tu!" << endl;
 		
 		pid = fork();	// fork
 		if ( pid < 0 )
@@ -95,7 +79,6 @@ int main(int argc, char* argv[])
           cerr << "Error on fork." << endl;
           exit(EXIT_FAILURE);
         }
-		
 		if ( pid == 0 ) // child process
 		{
 			if (close(welcome_soc) < 0)
@@ -103,7 +86,7 @@ int main(int argc, char* argv[])
 				cerr << "Close error." << endl;
 				return EXIT_FAILURE;
 			}
-			
+			/***** ZACATEK SAMOTNE KOMUNIKACE *****/
 			communicate(&in_soc, &options);
 			
 			if (close(in_soc) < 0)
@@ -111,8 +94,6 @@ int main(int argc, char* argv[])
 				cerr << "Close error." << endl;
 				return EXIT_FAILURE;
 			}
-			
-			/***** TADY SI NEJSEM JISTEJ *****/
 			break;
 		}
 		else	// parent process
@@ -155,7 +136,6 @@ int getPort(int argc, char* argv[], tOptions* opts)
 				break;
 		}
 	}
-	// if port neni cislo, skonci
 	return EXIT_SUCCESS;
 }
 
@@ -202,72 +182,57 @@ int createSocket()
 	return new_soc;
 }
 /****************************************************************************************************
- * .
+ * Funkce.
  ****************************************************************************************************
- * @param
- * @param
- * @param
- * @return			zahodi se
+ * @param sin			struktura
+ * @param welcome_soc	welcome socket
+ * @param in_soc		komunikacni soket
+ * @return				zahodi se
  */
 int acceptConnection(struct sockaddr_in* sin, int* welcome_soc, int* in_soc)
 {
-	/* accepting new connection request from client, socket id for the new connection is returned in in_soc */
 	int sin_len;
-	// int port;
 	string hostname;
 	sin_len = sizeof(*sin);
 	*in_soc = accept(*welcome_soc, (struct sockaddr *)sin, (socklen_t*)&sin_len);
-	/*
-	if(DEBUG)
-	{
-		hostname = inet_ntoa(sin->sin_addr);
-		port = htons(sin->sin_port);
-		cout << "From " << port << ": " << hostname << "." << endl;
-	}
-	*/
 	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************
  * Funkce slouzici pro komunikaci s klientem.
  ****************************************************************************************************
- * @param
- * @return			
+ * @param in_soc		komunkikacni socket
+ * @param opts			pomocna struktura s prepinaci
+ * @return				se stejne zahodi
  */
 int communicate(int* in_soc, tOptions* opts)
 {
-	char recived_message[BUFF_SIZE];
+	char recieved_message[BUFF_SIZE];
 	string request, answer;
-	bzero(recived_message, BUFF_SIZE*sizeof(char) );
+	bzero(recieved_message, BUFF_SIZE*sizeof(char) );
 	
-	/*
 	int i = 1;
 	while(i)
-	{
-	*/
-	
-	/***** READ REQUEST *****/
-	if ( read(*in_soc, recived_message, BUFF_SIZE ) <0)
-	{
-		cerr << "error on read" << endl;	// read error
-		return -1;
+	{		
+		/***** READ REQUEST *****/
+		if ( read(*in_soc, recieved_message, BUFF_SIZE ) < 0 )
+		{
+			cerr << "error on read" << endl;	// read error
+			return -1;
+		}
+		/***** CREATE ANSWER *****/
+		answer = createAnswer(recieved_message, opts, &i);
+		if ( i == 0 )
+			return EXIT_SUCCESS;
+		/***** SEND ANSWER *****/
+		if ( send(*in_soc, answer.c_str(), answer.length(), 0) < 0 )	// odeslani odpovedi klientovi
+		{
+			perror("Error on sending.\n");	// chyba pri odesilani zpravy
+			exit(EXIT_FAILURE);
+		}
+		opts->search.clear();
+		opts->parameters.clear();
 	}
-	
-	/***** CREATE ANSWER *****/
-	answer = createAnswer(recived_message, opts);
-	
-	/***** SEND ANSWER *****/
-	if ( send(*in_soc, answer.c_str(), answer.length(), 0) < 0 )	// odeslani odpovedi klientovi
-	{
-		perror("Error on sending.\n");	// chyba pri odesilani zpravy
-		exit(EXIT_FAILURE);
-	}
-	
-	/*
-	}
-	konec whilu
-	*/
-	
 	return EXIT_SUCCESS;
 }
 
@@ -278,12 +243,14 @@ int communicate(int* in_soc, tOptions* opts)
  * @param opts		ukazatel na strukturu s prepinaci
  * @return			vytvorena zprava
  */
-string createAnswer(char* request, tOptions* opts)
+string createAnswer(char* request, tOptions* opts, int* i)
 {
 	string answer, s_request;
 	s_request = request;
-	processRequest(s_request, opts);
-	
+	processRequest(s_request, opts, i);
+	if ( *i == 0 )
+		return "END\n";
+
 	find(opts);
 	if ( opts->goals.empty() )
 	{
@@ -298,14 +265,13 @@ string createAnswer(char* request, tOptions* opts)
 	else
 	{
 		answer.append("F\n");
-		// sem while
 		while ( !opts->goals.empty() )
 		{
 			answer.append( opts->goals.front() );
 			opts->goals.erase( opts->goals.begin() );
 		}
+
 	}
-	cout << answer;
 	return answer;
 }
 
@@ -328,11 +294,11 @@ int find(tOptions* opts)
 	
 	while( getline(etcPasswd, line) )
 	{
-		// pokud se login/uid == search
 		vector<string> items;
 		size_t offset = 0;
 		int match = 0;
 		string item, goal;
+		
 		while ( ( offset = line.find(delimiter) ) != string::npos )
 		{
 			item = line.substr(0, offset);
@@ -345,17 +311,16 @@ int find(tOptions* opts)
 			if ( opts->search.compare(items[0]) == 0 )
 				match = 1;
 		}
-		else if ( opts->u_or_l == 2 )	//case uid
+		else if ( opts->u_or_l == 2 )	// case uid
 		{
 			if ( opts->search.compare(items[2]) == 0 )
 				match = 1;
-		}
-		
+		}		
 		if ( match )
 		{
-			for (size_t i = 0; i < opts->parameters.length(); i++)
+			for (size_t s = 0; s < opts->parameters.length(); s++)
 			{
-				switch(opts->parameters[i])
+				switch(opts->parameters[s])
 				{
 					case 'L':
 						goal.append(items[0]);
@@ -383,7 +348,7 @@ int find(tOptions* opts)
 						break;
 				}
 			}
-			goal.append("\n");
+			goal.append("\n");		
 			opts->goals.push_back(goal);
 		}
 	}
@@ -397,7 +362,7 @@ int find(tOptions* opts)
  * @param opts			...
  * @return				...
  */
-int processRequest(string request, tOptions* opts)
+int processRequest(string request, tOptions* opts, int* i)
 {
 	string line;
 	istringstream fStr(request);
@@ -405,6 +370,11 @@ int processRequest(string request, tOptions* opts)
 		opts->u_or_l = 1;
 	else if ( request[0] == 'U' )
 		opts->u_or_l = 2;
+	else if ( request[0] == 'E' )
+	{
+		*i = 0;
+		return 0;
+	}
 	getline(fStr, line);
 	opts->search.append(line, 2, line.length()-2 );
 	getline(fStr, line);

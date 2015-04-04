@@ -22,14 +22,11 @@
 /****** POMOCNA MAKRA ******/
 #define LOGIN	1
 #define UID		2
-#define BUFF_SIZE 1024
-// pomocny ladici define
-#define DEBUG	1
+#define BUFF_SIZE 100
 
 /*
  * TO DO LIST:
  * - dokumentace
- * - SLEEP?
  */
 
 using namespace std;
@@ -80,6 +77,7 @@ int main (int argc, char* argv[])
 	int soc;
 	struct sockaddr_in sin;
 	string message;
+	string end_message = "E";
 	tOptions options;
 	memset(&sin, 0, sizeof(sin));
 	
@@ -102,7 +100,11 @@ int main (int argc, char* argv[])
 			i = 0;
 	}
 	
-	// jeste poslat zpravu konce
+	if ( send(soc, end_message.c_str(), end_message.length(), 0) < 0 )	// odeslani zpravy na server
+	{
+		perror("Error on sending.\n");	// chyba pri odesilani zpravy
+		exit(EXIT_FAILURE);
+	}
 	
 	/***** UZAVRENI SOCKETU *****/
 	if ( close(soc) < 0 )
@@ -217,6 +219,7 @@ int communication(string message, int* soc)
 	char recieved_message[BUFF_SIZE];	// ulozeni zpravy do potrebneho datoveho typu
 	int n;
 	string answer;
+	bzero(recieved_message, BUFF_SIZE*sizeof(char) );
 	/***** ODESLANI A OBDRZENI SOCKETU *****/
 	if ( send(*soc, message.c_str(), message.length(), 0) < 0 )	// odeslani zpravy na server
 	{
@@ -247,8 +250,10 @@ int communication(string message, int* soc)
 		while ( ( offset = answer.find(delimiter) ) != string::npos )
 		{
 			item = answer.substr(0, offset);
+			//cout << "TISKNU:" << endl;
 			cout << item << endl;
 			answer.erase( 0, offset+delimiter.length() );
+			//cout << answer << endl;
 		}
 	}
 	else if ( recieved_message[0] == 'N' )

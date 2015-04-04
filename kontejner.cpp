@@ -160,4 +160,11 @@ if(DEBUG)
 		port = htons(sin->sin_port);
 		cout << "From " << port << ": " << hostname << "." << endl;
 	}
+
+// ********************************************************************************************************
 	
+cout << "Stav vektoru:" << endl;
+			for( vector<string>::const_iterator i = opts->goals.begin(); i != opts->goals.end(); i++)
+			{
+				cout << *i << endl;
+			}
