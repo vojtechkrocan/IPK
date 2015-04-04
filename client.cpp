@@ -232,6 +232,24 @@ int communication(string message, int* soc)
 	
 	/***** TISK OBDRZENE ZPRAVY *****/
 	if(DEBUG){cout << "Answer from server: " << endl;}
+	/*
+	if ( recieved_message[0] == 'F' )
+	{
+		
+	}
+	else if ( recieved_message[0] == 'N' )
+	{
+		co to bude uz tady
+		if ( recieved_message[1] == 'L' )
+		{
+			cerr << "Chyba: Neznamy login " << endl;
+		}
+		else if ( recieved_message[1] == 'U' )
+		{
+			cerr << "Chyba: Nezname uid " << endl;
+		}
+	}
+	*/
 	cout << recieved_message;
 	
 	return 0;
