@@ -14,12 +14,15 @@
 /***** C++ knihovny ******/
 #include <iostream>
 #include <vector>
-
+#include <sstream>
+#include <fstream>
+#include <string>
+#include <algorithm>
 
 /****** POMOCNA MAKRA ******/
 #define LOGIN	1
 #define UID		2
-#define BUFF_SIZE 100
+#define BUFF_SIZE 1024
 // pomocny ladici define
 #define DEBUG	1
 
@@ -88,21 +91,18 @@ int main (int argc, char* argv[])
 	int i = 0;
 	if( ( options.u_or_l == LOGIN && !(options.login_vect.empty()) ) || ( options.u_or_l == UID && !(options.uid_vect.empty()) ) )
 		i = 1;
+	// sem else vetev?
+	
 	while( i )
 	{
 		message = createMessage(&options);
 		communication(message, &soc);		
 		message.clear();
-		
-		if( ( options.u_or_l == LOGIN && !(options.login_vect.empty()) ) || ( options.u_or_l == UID && !(options.uid_vect.empty()) ) )
-			i = 1;
-		else
+		if( ( (options.u_or_l == LOGIN) && options.login_vect.empty() ) || ( (options.u_or_l == UID) && options.uid_vect.empty() ) )
 			i = 0;
-		/*
-		if( ( options.u_or_l == LOGIN && options.login_vect.empty() ) || ( options.u_or_l == UID && options.uid_vect.empty() ) )
-			i = 0;
-		*/
 	}
+	
+	// jeste poslat zpravu konce
 	
 	/***** UZAVRENI SOCKETU *****/
 	if ( close(soc) < 0 )
@@ -110,7 +110,6 @@ int main (int argc, char* argv[])
 		cerr << "Error closing socket." << endl;
 		return(EXIT_FAILURE);
 	}
-	
 	return EXIT_SUCCESS;
 }
 
@@ -179,6 +178,12 @@ int processArg(int argc, char* argv[], tOptions* opts)
 				opts->N_flag = 1;
 				break;
 			
+			case 'H':
+				if ( opts->H_flag == 0 )
+					opts->prepinace.append("H");
+				opts->H_flag = 1;
+				break;
+			
 			case 'S':
 				if ( opts->S_flag == 0 )
 					opts->prepinace.append("S");
@@ -211,47 +216,62 @@ int communication(string message, int* soc)
 {
 	char recieved_message[BUFF_SIZE];	// ulozeni zpravy do potrebneho datoveho typu
 	int n;
-
+	string answer;
 	/***** ODESLANI A OBDRZENI SOCKETU *****/
 	if ( send(*soc, message.c_str(), message.length(), 0) < 0 )	// odeslani zpravy na server
 	{
 		perror("Error on sending.\n");	// chyba pri odesilani zpravy
 		exit(EXIT_FAILURE);
 	}
-	if(DEBUG){cout << "Message for server:" << endl << message << endl;}
 		
-	// uspat?
 	//sleep(1);
+	
 	if ( ( n = read(*soc, recieved_message, sizeof(recieved_message)) ) < 0 )	// obdrzeni zpravy
 	{
 		perror("Error on read.\n");	// read error
 		exit(EXIT_FAILURE);
 	}
 	
-	// projit recieved message, jestli bude na zacatku F cout, jestli N cerr;
-	
 	/***** TISK OBDRZENE ZPRAVY *****/
-	if(DEBUG){cout << "Answer from server: " << endl;}
-	/*
+	answer = recieved_message;
+	size_t offset = 0;
+	string delimiter = "\n";
+	string item;
+	if ( ( offset = answer.find(delimiter) ) != string::npos)
+	{
+		item = answer.substr(0, offset);
+		answer.erase( 0, offset+delimiter.length() );
+	}
 	if ( recieved_message[0] == 'F' )
 	{
-		
+		while ( ( offset = answer.find(delimiter) ) != string::npos )
+		{
+			item = answer.substr(0, offset);
+			cout << item << endl;
+			answer.erase( 0, offset+delimiter.length() );
+		}
 	}
 	else if ( recieved_message[0] == 'N' )
 	{
-		co to bude uz tady
 		if ( recieved_message[1] == 'L' )
 		{
-			cerr << "Chyba: Neznamy login " << endl;
+			if ( ( offset = answer.find(delimiter) ) != string::npos)
+			{
+				item = answer.substr(0, offset);
+				answer.erase( 0, offset+delimiter.length() );
+			}
+			cerr << "Chyba: Neznamy login " << item << endl;
 		}
 		else if ( recieved_message[1] == 'U' )
 		{
-			cerr << "Chyba: Nezname uid " << endl;
+			if ( ( offset = answer.find(delimiter) ) != string::npos)
+			{
+				item = answer.substr(0, offset);
+				answer.erase( 0, offset+delimiter.length() );
+			}
+			cerr << "Chyba: Nezname uid " << item << endl;
 		}
-	}
-	*/
-	cout << recieved_message;
-	
+	}	
 	return 0;
 }
  

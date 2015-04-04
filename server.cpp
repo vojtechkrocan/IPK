@@ -14,6 +14,10 @@
 /***** C++ knihovny ******/
 #include <iostream>
 #include <vector>
+#include <sstream>
+#include <fstream>
+#include <string>
+#include <algorithm>
 
 /****** POMOCNA MAKRA ******/
 #define DEBUG 1
@@ -36,7 +40,18 @@ using namespace std;
  */
 
 typedef struct {
+	int u_or_l;
 	string parameters;
+	string search;
+	vector<string> goals;
+	/*
+	string UID;
+	string LOGIN;
+	string GID;
+	string NAME;
+	string HOME;
+	string SHELL;
+	*/
 	int port;
 	} tOptions;
 
@@ -44,9 +59,11 @@ void initOptions(tOptions*);
 int getPort(int, char* [], tOptions*);
 int setNetwork(int*, struct sockaddr_in*, tOptions*);
 int createSocket();
-int acceptConnection(struct sockaddr_in*, struct sockaddr_in*, int*, int*);
-int communicate(int*);
-string createAnswer(string);
+int acceptConnection(struct sockaddr_in*, int*, int*);
+int communicate(int*, tOptions*);
+string createAnswer(char *, tOptions*);
+int processRequest(string, tOptions*);
+int find(tOptions*);
 
 /****************************************************************************************************
  * Main.
@@ -63,20 +80,15 @@ int main(int argc, char* argv[])
 	getPort(argc, argv, &options);
 	setNetwork(&welcome_soc, &sin, &options);
 	
-	/*
-	WHILE START
-	while(1)
-	{
-		
-	*/
-	
 	while (1)
 	{
 		int pid;
 		/* accepting new connection request from client, socket id for the new connection is returned in t */
-		acceptConnection(&client_sin, &sin, &welcome_soc, &in_soc);
-		/*
+		acceptConnection(&sin, &welcome_soc, &in_soc);
 		if( in_soc <= 0 ) continue;
+		
+		//cout << "Sem tu!" << endl;
+		
 		pid = fork();	// fork
 		if ( pid < 0 )
 		{
@@ -86,26 +98,33 @@ int main(int argc, char* argv[])
 		
 		if ( pid == 0 ) // child process
 		{
-			communicate(&in_soc);
+			if (close(welcome_soc) < 0)
+			{
+				cerr << "Close error." << endl;
+				return EXIT_FAILURE;
+			}
+			
+			communicate(&in_soc, &options);
+			
+			if (close(in_soc) < 0)
+			{
+				cerr << "Close error." << endl;
+				return EXIT_FAILURE;
+			}
+			
+			/***** TADY SI NEJSEM JISTEJ *****/
+			break;
 		}
-		else
-		*/
-		/* close connection, clean up sockets */
-		if ( close(in_soc) < 0 )
+		else	// parent process
 		{
-			cerr << "Error on close." << endl;
-			return EXIT_FAILURE;
+			// closing communication socket
+			if ( close(in_soc) < 0 )
+			{
+				cerr << "Error on close." << endl;
+				exit(EXIT_FAILURE);
+			}
 		}
-	} // not reach below
-	if (close(welcome_soc) < 0)
-	{
-		cerr << "Close error." << endl;
-		return EXIT_FAILURE;
 	}
-	/*
-	}
-	WHILE END
-	*/
 	return EXIT_SUCCESS;
 }
 
@@ -188,37 +207,44 @@ int createSocket()
  * @param
  * @param
  * @param
- * @param
  * @return			zahodi se
  */
-int acceptConnection(struct sockaddr_in* client_sin, struct sockaddr_in* sin, int* welcome_soc, int* in_soc)
+int acceptConnection(struct sockaddr_in* sin, int* welcome_soc, int* in_soc)
 {
 	/* accepting new connection request from client, socket id for the new connection is returned in in_soc */
-	int sin_len, port;
+	int sin_len;
+	// int port;
 	string hostname;
 	sin_len = sizeof(*sin);
 	*in_soc = accept(*welcome_soc, (struct sockaddr *)sin, (socklen_t*)&sin_len);
+	/*
 	if(DEBUG)
 	{
 		hostname = inet_ntoa(sin->sin_addr);
 		port = htons(sin->sin_port);
 		cout << "From " << port << ": " << hostname << "." << endl;
 	}
+	*/
 	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************
- * .
+ * Funkce slouzici pro komunikaci s klientem.
  ****************************************************************************************************
  * @param
- * @return			vytvoreny socket
+ * @return			
  */
-int communicate(int* in_soc)
+int communicate(int* in_soc, tOptions* opts)
 {
 	char recived_message[BUFF_SIZE];
-	int msg_len;
 	string request, answer;
 	bzero(recived_message, BUFF_SIZE*sizeof(char) );
+	
+	/*
+	int i = 1;
+	while(i)
+	{
+	*/
 	
 	/***** READ REQUEST *****/
 	if ( read(*in_soc, recived_message, BUFF_SIZE ) <0)
@@ -226,44 +252,174 @@ int communicate(int* in_soc)
 		cerr << "error on read" << endl;	// read error
 		return -1;
 	}
-	msg_len = strlen(recived_message);
-	cout << "Length of message is " << msg_len << ". Message from client is:" << endl << recived_message << endl;
 	
 	/***** CREATE ANSWER *****/
-	request = recived_message;
-	answer = createAnswer(request);
-	/***** WRITE ANSWER *****/
+	answer = createAnswer(recived_message, opts);
+	
+	/***** SEND ANSWER *****/
 	if ( send(*in_soc, answer.c_str(), answer.length(), 0) < 0 )	// odeslani odpovedi klientovi
 	{
 		perror("Error on sending.\n");	// chyba pri odesilani zpravy
 		exit(EXIT_FAILURE);
 	}
 	
+	/*
+	}
+	konec whilu
+	*/
+	
 	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************
- * .
+ * Funkce pro vytvoreni zpravy.
  ****************************************************************************************************
- * @param
+ * @param request	obdrzena zprava
+ * @param opts		ukazatel na strukturu s prepinaci
  * @return			vytvorena zprava
  */
-string createAnswer(string request)
+string createAnswer(char* request, tOptions* opts)
 {
-	int length;
-	string answer;
-	length = request.size();
-	answer = "PIZDA\n";
+	string answer, s_request;
+	s_request = request;
+	processRequest(s_request, opts);
+	
+	find(opts);
+	if ( opts->goals.empty() )
+	{
+		answer.append("N");
+		if ( opts->u_or_l == 1 )
+			answer.append("L\n");
+		else if ( opts->u_or_l == 2 )
+			answer.append("U\n");
+		answer.append(opts->search);
+		answer.append("\n");	
+	}
+	else
+	{
+		answer.append("F\n");
+		// sem while
+		while ( !opts->goals.empty() )
+		{
+			answer.append( opts->goals.front() );
+			opts->goals.erase( opts->goals.begin() );
+		}
+	}
+	cout << answer;
 	return answer;
+}
+
+/****************************************************************************************************
+ * Funkce pro hledani v souboru etc/passwd.
+ ****************************************************************************************************
+ * @param opts		...
+ * @return			...
+ */
+int find(tOptions* opts)
+{
+	string line;
+	string delimiter = ":";
+	ifstream etcPasswd("/etc/passwd");
+	if(!etcPasswd)
+	{
+		cerr << "Error on open: /etc/passwd." << endl;
+		exit(EXIT_FAILURE);
+	}
+	
+	while( getline(etcPasswd, line) )
+	{
+		// pokud se login/uid == search
+		vector<string> items;
+		size_t offset = 0;
+		int match = 0;
+		string item, goal;
+		while ( ( offset = line.find(delimiter) ) != string::npos )
+		{
+			item = line.substr(0, offset);
+			items.push_back(item);
+			line.erase( 0, offset+delimiter.length() );
+		}
+		items.push_back(line);
+		if ( opts->u_or_l == 1 ) // case login
+		{
+			if ( opts->search.compare(items[0]) == 0 )
+				match = 1;
+		}
+		else if ( opts->u_or_l == 2 )	//case uid
+		{
+			if ( opts->search.compare(items[2]) == 0 )
+				match = 1;
+		}
+		
+		if ( match )
+		{
+			for (size_t i = 0; i < opts->parameters.length(); i++)
+			{
+				switch(opts->parameters[i])
+				{
+					case 'L':
+						goal.append(items[0]);
+						goal.append(" ");
+						break;
+					case 'U':
+						goal.append(items[2]);
+						goal.append(" ");
+						break;
+					case 'G':
+						goal.append(items[3]);
+						goal.append(" ");
+						break;
+					case 'H':
+						goal.append(items[5]);
+						goal.append(" ");
+						break;
+					case 'S':
+						goal.append(items[6]);
+						goal.append(" ");
+						break;
+					case 'N':
+						goal.append(items[4]);
+						goal.append(" ");
+						break;
+				}
+			}
+			goal.append("\n");
+			opts->goals.push_back(goal);
+		}
+	}
+	return EXIT_SUCCESS;
+}
+
+/****************************************************************************************************
+ * Funkce na zpracovani pozadavku.
+ ****************************************************************************************************
+ * @param request		zprava od klienta
+ * @param opts			...
+ * @return				...
+ */
+int processRequest(string request, tOptions* opts)
+{
+	string line;
+	istringstream fStr(request);
+	if ( request[0] == 'L' )
+		opts->u_or_l = 1;
+	else if ( request[0] == 'U' )
+		opts->u_or_l = 2;
+	getline(fStr, line);
+	opts->search.append(line, 2, line.length()-2 );
+	getline(fStr, line);
+	opts->parameters.append(line);
+	return EXIT_SUCCESS;
 }
 
 /****************************************************************************************************
  * Funkce na inicializaci struktury s prepinaci.
  ****************************************************************************************************
- * @param tOptions* - uk. na strukturu k inicializaci
+ * @param opts - uk. na strukturu k inicializaci
  */
 void initOptions(tOptions* opts)
 {
 	opts->port = -1;
+	opts->u_or_l = 0;
 	opts->parameters = "";
 }
