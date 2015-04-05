@@ -22,11 +22,12 @@
 /****** POMOCNA MAKRA ******/
 #define LOGIN	1
 #define UID		2
-#define BUFF_SIZE 100
+#define BUFF_SIZE 256
 
 /*
  * TO DO LIST:
  * - dokumentace
+ * - situace "-l [NIC]" nebo "-u [NIC]"
  */
 
 using namespace std;
@@ -83,24 +84,31 @@ int main (int argc, char* argv[])
 	
 	initOptions(&options);	// incializace hodnot ve pomocne strukture
 	processArg(argc, argv, &options);	// zpracovani argumentu - ulozeni prepinacu
-	setNetwork(&sin, &options, &soc);	// vytvoreni socketu, ziskani adresy
-	connectToServer(&soc, &sin);	// pripojeni k serveru
-	
 	int i = 0;
 	if( ( options.u_or_l == LOGIN && !(options.login_vect.empty()) ) || ( options.u_or_l == UID && !(options.uid_vect.empty()) ) )
 		i = 1;
-	// sem else vetev?
+	else
+	{
+		cerr << "Client needs login or uid to be inserted." << endl;
+		exit(EXIT_FAILURE);
+	}
+	
+	setNetwork(&sin, &options, &soc);	// vytvoreni socketu, ziskani adresy
+	connectToServer(&soc, &sin);	// pripojeni k serveru
 	
 	while( i )
 	{
+		/***** VYTVORENI ZPRAVY *****/
 		message = createMessage(&options);
+		/***** SAMOTNA KOMUNIKACE *****/
 		communication(message, &soc);		
 		message.clear();
 		if( ( (options.u_or_l == LOGIN) && options.login_vect.empty() ) || ( (options.u_or_l == UID) && options.uid_vect.empty() ) )
 			i = 0;
 	}
 	
-	if ( send(soc, end_message.c_str(), end_message.length(), 0) < 0 )	// odeslani zpravy na server
+	/***** ZPRAVA O UKONCENI SPOJENI *****/
+	if ( send(soc, end_message.c_str(), end_message.length(), 0) < 0 )
 	{
 		perror("Error on sending.\n");	// chyba pri odesilani zpravy
 		exit(EXIT_FAILURE);
@@ -198,9 +206,9 @@ int processArg(int argc, char* argv[], tOptions* opts)
 				break;
 		}
 	}
-	if ( argc == 1 || opts->hostname_flag == 0 || opts->port_flag == 0) // ( login_f == 0 && uid_f == 0 )?
+	if ( argc == 1 || opts->hostname_flag == 0 || opts->port_flag == 0 || (opts->login_flag == 0 && opts->uid_flag == 0) )
 	{
-		cerr << "Client needs hostname and port." << endl;
+		cerr << "Client needs hostname, port and login or uid." << endl;
 		exit(EXIT_FAILURE);
 	}
 	
@@ -250,10 +258,8 @@ int communication(string message, int* soc)
 		while ( ( offset = answer.find(delimiter) ) != string::npos )
 		{
 			item = answer.substr(0, offset);
-			//cout << "TISKNU:" << endl;
 			cout << item << endl;
 			answer.erase( 0, offset+delimiter.length() );
-			//cout << answer << endl;
 		}
 	}
 	else if ( recieved_message[0] == 'N' )
